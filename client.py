@@ -9,7 +9,7 @@ import sys
 import time
 import numpy as np
 
-student_id = 7
+student_id = 11
 subject_date_id = input("Nh?p subject_date_id: ").strip()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 mtcnn = MTCNN(keep_all=False, device=device)
@@ -19,7 +19,7 @@ cap = cv2.VideoCapture(0)
 i = 0
 mode = 'idle'
 
-RECOGNITION_URL = "http://192.168.1.217:8000/api/recognize/"  # ?? Thay b?ng IP server th?t n?u c?n
+RECOGNITION_URL = "http://127.0.0.1:8000/api/recognize/"  # ?? Thay b?ng IP server th?t n?u c?n
 
 print('[INFO] Press "T" to start collecting images or "A" to start recognition')
 
@@ -42,7 +42,7 @@ while True:
             buffer.seek(0)
 
             response = requests.post(
-                "http://192.168.1.217:8000/api/upload-face/",
+                "http://127.0.0.1:8000/api/upload-face/",
                 files={"image": (f"{i}.jpg", buffer, "image/jpeg")},
                 data={
                     "student_id": student_id,
@@ -55,7 +55,6 @@ while True:
             else:
                 print(f"[{i}] Upload failed: {response.text}")
 
-    # G?i ?nh d?n server d? nh?n di?n n?u dang ? ch? d? "recognize"
     if mode == 'recognize':
         _, img_encoded = cv2.imencode('.jpg', frame)
         files = {'image': ('frame.jpg', img_encoded.tobytes(), 'image/jpeg')}

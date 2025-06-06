@@ -3,63 +3,56 @@ import torch
 import numpy as np
 from facenet_pytorch import MTCNN, InceptionResnetV1
 import torch.nn.functional as F
+from rest_framework.decorators import api_view
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.core.files.uploadedfile import InMemoryUploadedFile
 from PIL import Image
-import io
-from rest_framework.decorators import api_view
-import os
-from django.conf import settings
-from attendance_app.models import SubjectDate, SubjectStudent, CustomUser, StudentAttendance;
+from attendance_app.models import SubjectDate, CustomUser, StudentAttendance
+from attendance_app.permissions import IsTeacher, IsStudent
+from rest_framework.permissions import IsAuthenticated
 
-
-
-# Cấu hình thiết bị
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-THRESHOLD = 0.8  # Ngưỡng nhận diện
+THRESHOLD = 0.8
 
-# Khởi tạo mô hình MTCNN và InceptionResnetV1
 mtcnn = MTCNN(keep_all=True, device=device)
 model = InceptionResnetV1(pretrained='vggface2').eval().to(device)
 
-# Tải centroids (dữ liệu huấn luyện đã có)
-with open('recognize_app/centroids.json', 'r') as f:
+with open(r'E:\face_recognize\recognize_app\centroids.json', 'r') as f:
     cent_dict = json.load(f)
 
 names = list(cent_dict.keys())
 centroids = torch.stack([F.normalize(torch.tensor(cent_dict[n]), dim=0) for n in names]).to(device)
 
+
 class FaceRecognitionAPIView(APIView):
+
     def post(self, request):
         uploaded_file = request.FILES.get("image")
         subject_date_id = request.data.get("subject_date_id")
 
-
-        
-        if not SubjectDate.objects.filter(id=subject_date_id).exists():
-            return Response({
-                "boxes": [],
-                "names": "NF",
-                "scores": [],
-            }, status=200)
-
         if not uploaded_file:
-            print("Không có ảnh được gửi lên.")  
             return Response({"error": "No image provided"}, status=status.HTTP_400_BAD_REQUEST)
 
-        print(f"Đã nhận ảnh: {uploaded_file.name}")
+        try:
+            subject_date = SubjectDate.objects.get(id=subject_date_id)
+        except SubjectDate.DoesNotExist:
+            return Response({"boxes": [], "names": [], "scores": [], "attended_users": []}, status=status.HTTP_200_OK)
 
-        # Đọc ảnh từ file tải lên
-        image = Image.open(uploaded_file)
-        rgb_image = np.array(image.convert('RGB'))  # Chuyển ảnh sang RGB
+        if not subject_date.status:
+            return Response({"boxes": [], "names": [], "scores": [], "attended_users": []}, status=status.HTTP_200_OK)
 
-        # Tìm các khuôn mặt trong ảnh
+        try:
+            image = Image.open(uploaded_file).convert('RGB')
+            rgb_image = np.array(image)
+        except Exception:
+            return Response({"error": "Invalid image file"}, status=status.HTTP_400_BAD_REQUEST)
+
         faces = mtcnn(rgb_image)
         boxes, _ = mtcnn.detect(rgb_image)
 
-        results = {'boxes': [], 'names': [], 'scores': []}
+        results = {'boxes': [], 'names': [], 'scores': [], 'attended_users': []}
+        attended_users = []
 
         if faces is not None and boxes is not None:
             if isinstance(faces, torch.Tensor):
@@ -67,48 +60,45 @@ class FaceRecognitionAPIView(APIView):
 
             batch = torch.stack(faces).to(device)
             with torch.no_grad():
-                embs = F.normalize(model(batch))  # Tính toán embedding
-                sims = embs @ centroids.T  # Tính cosine similarity
+                embs = F.normalize(model(batch))
+                sims = embs @ centroids.T
                 best_scores, best_idx = sims.max(1)
 
-            print(f"Phát hiện {len(boxes)} khuôn mặt.")
-
-            for (box, score, idx) in zip(boxes, best_scores, best_idx):
+            for box, score, idx in zip(boxes, best_scores, best_idx):
                 x1, y1, x2, y2 = map(int, box)
+                name = "Unknown"
+
                 if score >= THRESHOLD:
-                    subject_date = SubjectDate.objects.get(id=subject_date_id)
-                    if subject_date.status == False:
-                        return Response({
-                            "boxes": [],
-                            "names": "NF",
-                            "scores": [],
-                            }, status=200)
-                    student = CustomUser.objects.get(id=names[idx]) 
-                    if not student:
-                        name = "Unknown"
-                    #attendance = StudentAttendance.objects.get(student=student, subject_date=subject_date)
-                    attendance = StudentAttendance.objects.filter(student=student, subject_date=subject_date).first()
-                    print(names[idx])
-                    if attendance and attendance.status == False:
-                        attendance.status = True
-                        attendance.save()
-                        name = student.first_name
-                    elif attendance and attendance.status == True:
-                        name = student.first_name + " OK"
+                    recognized_name = names[idx]
+                    student = CustomUser.objects.filter(username=recognized_name).first()
+
+                    if student:
+                        # Kiểm tra xem student có trong danh sách điểm danh của buổi học này không
+                        attendance = StudentAttendance.objects.filter(student=student, subject_date=subject_date).first()
+                        if attendance:
+                            if not attendance.status:
+                                attendance.status = True
+                                attendance.save()
+                                name = student.username
+                                attended_users.append(student.username)
+                            else:
+                                name = student.username + " OK"
+                        else:
+                            name = student.username + " (Not enrolled)"
                     else:
                         name = "Unknown"
-                else:
-                    name = "Unknown"
-
-                print(f"Khuôn mặt tại [{x1}, {y1}, {x2}, {y2}] - Tên: {name} - Điểm: {score.item():.4f}")
 
                 results['boxes'].append([x1, y1, x2, y2])
                 results['names'].append(name)
                 results['scores'].append(score.item())
+
+            results['attended_users'] = attended_users
         else:
-            print("Không phát hiện được khuôn mặt nào.")
+            return Response({"boxes": [], "names": [], "scores": [], "attended_users": []}, status=status.HTTP_200_OK)
 
         return Response(results, status=status.HTTP_200_OK)
+
+
 @api_view(['POST'])
 def upload_face(request):
     student_id = request.POST.get('student_id')
@@ -117,11 +107,20 @@ def upload_face(request):
     if not student_id or not image:
         return Response({'error': 'Missing student_id or image'}, status=status.HTTP_400_BAD_REQUEST)
 
-    # Tạo thư mục lưu ảnh nếu chưa có
-    save_dir = os.path.join(settings.MEDIA_ROOT, 'dataset', student_id)
+    # Lấy user theo student_id
+    try:
+        user = CustomUser.objects.get(id=student_id)
+    except CustomUser.DoesNotExist:
+        return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Lấy tên folder theo username
+    folder_name = user.username.strip()
+
+    base_dir = r'E:\face_recognize\media\dataset' 
+    save_dir = os.path.join(base_dir, folder_name)
     os.makedirs(save_dir, exist_ok=True)
 
-    # Lưu ảnh
+    # Lưu ảnh vào folder tương ứng
     image_path = os.path.join(save_dir, image.name)
     with open(image_path, 'wb+') as f:
         for chunk in image.chunks():

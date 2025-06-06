@@ -4,7 +4,7 @@ from .models import CustomUser, Subject, SubjectStudent, SubjectDate, StudentAtt
 
 # Register CustomUser model
 class CustomUserAdmin(admin.ModelAdmin):
-    list_display = ('username', 'email', 'role', 'phone', 'avatar', 'date_created')
+    list_display = ('id','username', 'email', 'role', 'phone', 'avatar', 'date_created')
     search_fields = ('username', 'email', 'role')
     list_filter = ('role',)
     ordering = ('date_created',)
@@ -41,7 +41,7 @@ admin.site.register(SubjectStudent, SubjectStudentAdmin)
 
 # Register SubjectDate model
 class SubjectDateAdmin(admin.ModelAdmin):
-    list_display = ('subject', 'current_date', 'status')
+    list_display = ('id','subject', 'current_date', 'status')
     search_fields = ('subject__name',)
     list_filter = ('subject', 'status')
     ordering = ('subject', 'current_date')
