@@ -13,6 +13,7 @@ DEBUG = True
 ALLOWED_HOSTS = ['192.168.1.217', 'localhost', '127.0.0.1', '192.168.0.100']
 
 INSTALLED_APPS = [
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -35,8 +36,8 @@ REST_FRAMEWORK = {
 from datetime import timedelta
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(hours=1),  
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7), 
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=30),  
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=30), 
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',
@@ -77,16 +78,12 @@ WSGI_APPLICATION = 'attendance_project.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'pbl5',  # Tên database
-        'USER': 'root',  # User mặc định của MySQL trên XAMPP
-        'PASSWORD': '',  # XAMPP mặc định không có mật khẩu
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'pbl5',           
+        'USER': 'postgres',      
+        'PASSWORD': '',  
         'HOST': '127.0.0.1',
-        'PORT': '3306',
-        'OPTIONS': {
-            'charset': 'utf8mb4',
-            'init_command': "SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;",
-        }
+        'PORT': '5432',          
     }
 }
 

@@ -11,7 +11,7 @@ from facenet_pytorch import InceptionResnetV1
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, 'dataset')
-OUT_FILE = 'recognize_app/centroids.json'
+OUT_FILE = r'E:\face_recognize\recognize_app\centroids.json'
 BATCH = 32
 
 # DataLoader
